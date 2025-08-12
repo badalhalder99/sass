@@ -1,0 +1,441 @@
+{
+	"info": {
+		"name": "Multi-Tenant SaaS API",
+		"description": "Complete API collection for testing multi-tenant SaaS application",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3002",
+			"type": "string"
+		},
+		{
+			"key": "tenant_id",
+			"value": "1",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Health Check",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/health",
+					"host": ["{{base_url}}"],
+					"path": ["health"]
+				}
+			}
+		},
+		{
+			"name": "Tenant Management",
+			"item": [
+				{
+					"name": "Create Tenant",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Demo Company\",\n  \"subdomain\": \"democompany\",\n  \"plan_type\": \"basic\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/tenants/create",
+							"host": ["{{base_url}}"],
+							"path": ["api", "tenants", "create"]
+						}
+					}
+				},
+				{
+					"name": "Get Tenant Details",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/tenants/details",
+							"host": ["{{base_url}}"],
+							"path": ["api", "tenants", "details"]
+						}
+					}
+				},
+				{
+					"name": "Update Tenant Settings",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"settings\": {\n    \"company_name\": \"Updated Company Name\",\n    \"theme\": \"dark\",\n    \"notifications\": true,\n    \"onboarding_completed\": true\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/tenants/settings",
+							"host": ["{{base_url}}"],
+							"path": ["api", "tenants", "settings"]
+						}
+					}
+				},
+				{
+					"name": "Get Tenant Stats",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/tenants/stats",
+							"host": ["{{base_url}}"],
+							"path": ["api", "tenants", "stats"]
+						}
+					}
+				},
+				{
+					"name": "List All Tenants",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/tenants/list?page=1&limit=10&status=active",
+							"host": ["{{base_url}}"],
+							"path": ["api", "tenants", "list"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "limit",
+									"value": "10"
+								},
+								{
+									"key": "status",
+									"value": "active"
+								}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Register User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Jane Smith\",\n  \"email\": \"jane.smith@company.com\",\n  \"password\": \"password123\",\n  \"age\": 28,\n  \"profession\": \"Designer\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/register",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "register"]
+						}
+					}
+				},
+				{
+					"name": "Login User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"admin@acme.com\",\n  \"password\": \"admin123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "login"]
+						}
+					}
+				},
+				{
+					"name": "Logout User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/auth/logout",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "logout"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "User Management",
+			"item": [
+				{
+					"name": "Get All Users",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "users"]
+						}
+					}
+				},
+				{
+					"name": "Create User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john.doe@company.com\",\n  \"password\": \"securePassword123\",\n  \"age\": 30,\n  \"profession\": \"Software Engineer\",\n  \"role\": \"user\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "users"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Subscription Management",
+			"item": [
+				{
+					"name": "Get Current Subscription",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/subscriptions/current",
+							"host": ["{{base_url}}"],
+							"path": ["api", "subscriptions", "current"]
+						}
+					}
+				},
+				{
+					"name": "Get Available Plans",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/subscriptions/plans",
+							"host": ["{{base_url}}"],
+							"path": ["api", "subscriptions", "plans"]
+						}
+					}
+				},
+				{
+					"name": "Update Subscription",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"plan_type\": \"premium\",\n  \"billing_cycle\": \"yearly\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/subscriptions/update",
+							"host": ["{{base_url}}"],
+							"path": ["api", "subscriptions", "update"]
+						}
+					}
+				},
+				{
+					"name": "Get Subscription Usage",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/subscriptions/usage",
+							"host": ["{{base_url}}"],
+							"path": ["api", "subscriptions", "usage"]
+						}
+					}
+				},
+				{
+					"name": "Premium Data (Feature-Gated)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/subscriptions/premium-data",
+							"host": ["{{base_url}}"],
+							"path": ["api", "subscriptions", "premium-data"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Multi-Tenancy Tests",
+			"item": [
+				{
+					"name": "Test Tenant 1 Data",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-Tenant-ID",
+								"value": "1"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "users"]
+						}
+					}
+				},
+				{
+					"name": "Test Tenant 2 Data",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-Tenant-ID",
+								"value": "2"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "users"]
+						}
+					}
+				},
+				{
+					"name": "Test Tenant 3 Data",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-Tenant-ID",
+								"value": "3"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "users"]
+						}
+					}
+				},
+				{
+					"name": "Test Invalid Tenant",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-Tenant-ID",
+								"value": "999"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/tenants/details",
+							"host": ["{{base_url}}"],
+							"path": ["api", "tenants", "details"]
+						}
+					}
+				},
+				{
+					"name": "Test Missing Tenant Header",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "users"]
+						}
+					}
+				}
+			]
+		}
+	]
+}
