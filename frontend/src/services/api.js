@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:3002';
+const API_BASE_URL = 'http://localhost:3003';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -80,6 +80,28 @@ export const tenantAPI = {
       return response.data;
     } catch (error) {
       console.error('Error creating user:', error);
+      throw error;
+    }
+  },
+
+  // Update tenant
+  updateTenant: async (tenantId, updateData) => {
+    try {
+      const response = await api.put(`/api/users/tenants/${tenantId}`, updateData);
+      return response.data;
+    } catch (error) {
+      console.error('Error updating tenant:', error);
+      throw error;
+    }
+  },
+
+  // Delete tenant
+  deleteTenant: async (tenantId) => {
+    try {
+      const response = await api.delete(`/api/users/tenants/${tenantId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error deleting tenant:', error);
       throw error;
     }
   }

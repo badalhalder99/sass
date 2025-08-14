@@ -15,7 +15,6 @@ router.get('/tenants', async (req, res) => {
     const TenantModel = Tenant.initializeMySQL(sequelize);
     
     const tenants = await TenantModel.findAll({
-      where: { status: 'active' },
       attributes: ['id', 'name', 'subdomain', 'status', 'created_at'],
       order: [['created_at', 'ASC']]
     });
@@ -114,34 +113,169 @@ router.post('/tenants', async (req, res) => {
   }
 });
 
+// Update tenant
+router.put('/tenants/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    
+    const { getMySQLInstance } = require('../config/database');
+    const sequelize = await getMySQLInstance();
+    const Tenant = require('../models/Tenant');
+    
+    // Initialize Tenant model
+    const TenantModel = Tenant.initializeMySQL(sequelize);
+    
+    // Find and update the tenant
+    const [updatedCount] = await TenantModel.update(updateData, {
+      where: { id: parseInt(id) }
+    });
+    
+    if (updatedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Tenant not found'
+      });
+    }
+    
+    // Get the updated tenant
+    const updatedTenant = await TenantModel.findByPk(parseInt(id));
+    
+    res.json({
+      success: true,
+      message: 'Tenant updated successfully',
+      data: updatedTenant
+    });
+  } catch (error) {
+    console.error('Update tenant error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update tenant',
+      error: error.message
+    });
+  }
+});
+
+// Delete tenant
+router.delete('/tenants/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const { getMySQLInstance } = require('../config/database');
+    const sequelize = await getMySQLInstance();
+    const Tenant = require('../models/Tenant');
+    
+    // Initialize Tenant model
+    const TenantModel = Tenant.initializeMySQL(sequelize);
+    
+    // Find the tenant first to get its info
+    const tenant = await TenantModel.findByPk(parseInt(id));
+    
+    if (!tenant) {
+      return res.status(404).json({
+        success: false,
+        message: 'Tenant not found'
+      });
+    }
+    
+    // Delete the tenant
+    const deletedCount = await TenantModel.destroy({
+      where: { id: parseInt(id) }
+    });
+    
+    if (deletedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Tenant not found'
+      });
+    }
+    
+    // Optional: Also delete related data (users, etc.) from MongoDB
+    try {
+      const { getMongoDb } = require('../config/database');
+      const db = getMongoDb();
+      
+      // Delete users belonging to this tenant
+      await db.collection('users').deleteMany({ 
+        $or: [
+          { tenant_id: parseInt(id) },
+          { tenant_id: id.toString() }
+        ]
+      });
+      
+      console.log(`Deleted users for tenant ${id}`);
+    } catch (mongoError) {
+      console.warn('Failed to delete MongoDB data for tenant:', mongoError.message);
+      // Continue with successful response even if MongoDB cleanup fails
+    }
+    
+    res.json({
+      success: true,
+      message: 'Tenant deleted successfully',
+      data: { deletedTenant: tenant }
+    });
+  } catch (error) {
+    console.error('Delete tenant error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete tenant',
+      error: error.message
+    });
+  }
+});
+
 // Get all users - Multi-tenant aware with option to view all tenants
 router.get('/', async (req, res) => {
   try {
     const { tenant_id, all_tenants } = req.query;
     
-    // Use direct database access for frontend compatibility
     const { getMongoDb } = require('../config/database');
-    const db = getMongoDb(); // Use main database
-    const collection = db.collection('users');
-
+    let db, collection;
     let query = {};
     
     if (all_tenants === 'true') {
-      // Return users from all tenants
+      // Return users from all tenants (admin view)
       console.log('Fetching users from all tenants');
+      db = getMongoDb(); // Use main database
+      collection = db.collection('users');
     } else if (tenant_id) {
-      // Use specific tenant ID from query parameter
-      // Handle both string and number formats due to data inconsistency
       const tenantIdNum = parseInt(tenant_id);
-      const tenantIdStr = tenant_id.toString();
-      query.$or = [
-        { tenant_id: tenantIdNum },  // Number format
-        { tenant_id: tenantIdStr }   // String format
-      ];
-      console.log('Fetching users for specific tenant ID (both formats):', tenant_id);
+      
+      if (tenantIdNum > 1) {
+        // Use tenant-specific database for tenant users
+        console.log('Fetching users from tenant-specific database for tenant:', tenantIdNum);
+        try {
+          db = getMongoDb(tenantIdNum); // Tenant-specific database
+          collection = db.collection('users');
+          console.log('Successfully connected to tenant database:', db.databaseName);
+          // No need for query filter since we're already in tenant database
+        } catch (tenantError) {
+          console.error('Error accessing tenant database, falling back to main:', tenantError);
+          // Fallback to main database with filter
+          db = getMongoDb();
+          collection = db.collection('users');
+          console.log('Using main database fallback:', db.databaseName);
+          query.$or = [
+            { tenant_id: tenantIdNum },
+            { tenant_id: tenant_id.toString() }
+          ];
+        }
+      } else {
+        // Use main database for default tenant (1)
+        db = getMongoDb();
+        collection = db.collection('users');
+        query.$or = [
+          { tenant_id: tenantIdNum },
+          { tenant_id: tenant_id.toString() }
+        ];
+      }
+      
+      console.log('Fetching users for specific tenant ID:', tenant_id);
     } else {
       // Use tenant ID from middleware, fallback to 1 for backward compatibility
       const tenantId = req.tenantId || 1;
+      db = getMongoDb();
+      collection = db.collection('users');
       query.tenant_id = tenantId;
       console.log('Fetching users for tenant ID (default):', tenantId);
     }
@@ -152,6 +286,7 @@ router.get('/', async (req, res) => {
       .toArray();
     
     console.log('Found users:', users.length);
+    console.log('Database used:', db.databaseName);
     res.json({ success: true, data: users });
   } catch (error) {
     console.error('Get users error:', error);
@@ -162,7 +297,7 @@ router.get('/', async (req, res) => {
 // Create new user - Multi-tenant aware with tenant selection
 router.post('/', async (req, res) => {
   try {
-    const { name, email, age, profession, summary, tenant_id } = req.body;
+    const { name, email, storeName, domainName, summary, tenant_id } = req.body;
     
     // Validation
     if (!name || !email) {
@@ -183,8 +318,8 @@ router.post('/', async (req, res) => {
       tenant_id: tenantId,
       name,
       email,
-      age: age ? parseInt(age) : null,
-      profession,
+      storeName,
+      domainName,
       summary,
       role: 'user',
       status: 'active',
@@ -239,9 +374,24 @@ router.post('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const userId = req.params.id;
-    const tenantId = req.tenantId || 1;
+    const { tenant_id } = req.query;
+    const tenantId = tenant_id || req.tenantId || 1;
     
-    const user = await User.findById(userId, tenantId, 'mongodb');
+    const { getMongoDb } = require('../config/database');
+    let collection;
+    
+    if (parseInt(tenantId) > 1) {
+      // Use tenant-specific database
+      const db = getMongoDb(parseInt(tenantId));
+      collection = db.collection('users');
+    } else {
+      // Use main database
+      const db = getMongoDb();
+      collection = db.collection('users');
+    }
+    
+    const { ObjectId } = require('mongodb');
+    const user = await collection.findOne({ _id: new ObjectId(userId) });
     
     if (user) {
       // Remove password from response
@@ -260,23 +410,43 @@ router.get('/:id', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const userId = req.params.id;
-    const { name, email, age, profession, summary } = req.body;
-    const tenantId = req.tenantId || 1;
+    const { name, email, summary, tenant_id } = req.body;
+    const tenantId = tenant_id || req.tenantId || 1;
+    
+    console.log('UPDATE REQUEST - User ID:', userId, 'Tenant ID:', tenantId);
+    console.log('UPDATE REQUEST - Body:', req.body);
     
     const updateData = {
       name,
       email,
-      age: age ? parseInt(age) : null,
-      profession,
       summary,
       updated_at: new Date()
     };
 
-    const result = await User.updateById(userId, updateData, tenantId, 'mongodb');
+    const { getMongoDb } = require('../config/database');
+    let collection;
+    
+    if (parseInt(tenantId) > 1) {
+      // Use tenant-specific database
+      const db = getMongoDb(parseInt(tenantId));
+      collection = db.collection('users');
+      console.log('Updating user in tenant database:', db.databaseName);
+    } else {
+      // Use main database
+      const db = getMongoDb();
+      collection = db.collection('users');
+      console.log('Updating user in main database');
+    }
+    
+    const { ObjectId } = require('mongodb');
+    const result = await collection.updateOne(
+      { _id: new ObjectId(userId) },
+      { $set: updateData }
+    );
 
     if (result.modifiedCount > 0) {
       // Fetch updated user
-      const updatedUser = await User.findById(userId, tenantId, 'mongodb');
+      const updatedUser = await collection.findOne({ _id: new ObjectId(userId) });
       const { password, ...userData } = updatedUser;
       res.json({ success: true, data: userData });
     } else {
@@ -291,13 +461,46 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+// Test route to debug
+router.all('/:id', (req, res, next) => {
+  console.log('Route hit - Method:', req.method, 'ID:', req.params.id, 'Query:', req.query);
+  next();
+});
+
 // Delete user - Multi-tenant aware
 router.delete('/:id', async (req, res) => {
   try {
     const userId = req.params.id;
-    const tenantId = req.tenantId || 1;
+    const { tenant_id } = req.query;
+    const tenantId = tenant_id || req.tenantId || 1;
     
-    const result = await User.deleteById(userId, tenantId, 'mongodb');
+    console.log('DELETE REQUEST - User ID:', userId, 'Tenant ID:', tenantId);
+    console.log('DELETE REQUEST - Query params:', req.query);
+    
+    // Validate ObjectId format
+    if (!ObjectId.isValid(userId)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid user ID format' 
+      });
+    }
+    
+    const { getMongoDb } = require('../config/database');
+    let collection;
+    
+    if (parseInt(tenantId) > 1) {
+      // Use tenant-specific database
+      const db = getMongoDb(parseInt(tenantId));
+      collection = db.collection('users');
+      console.log('Deleting user from tenant database:', db.databaseName);
+    } else {
+      // Use main database
+      const db = getMongoDb();
+      collection = db.collection('users');
+      console.log('Deleting user from main database');
+    }
+    
+    const result = await collection.deleteOne({ _id: new ObjectId(userId) });
     
     if (result.deletedCount > 0) {
       res.json({ success: true, message: 'User deleted successfully' });

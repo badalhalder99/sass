@@ -25,8 +25,10 @@ const AuthSuccessPage = () => {
             // Set user data in context (this also stores token and user in localStorage)
             setUserData(user, token);
             
-            // Navigate to dashboard
-            navigate('/dashboard', { replace: true });
+            // Open dashboard in new tab
+            window.open('/dashboard', '_blank');
+            // Navigate back to home
+            navigate('/', { replace: true });
           } else {
             console.error('Failed to get user data:', response.data.message);
             localStorage.removeItem('token');

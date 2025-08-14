@@ -8,8 +8,8 @@ const SignUpPage = () => {
     email: '',
     password: '',
     confirmPassword: '',
-    age: '',
-    profession: '',
+    storeName: '',
+    domainName: '',
     summary: ''
   });
   const [error, setError] = useState('');
@@ -45,13 +45,22 @@ const SignUpPage = () => {
       name: formData.name,
       email: formData.email,
       password: formData.password,
-      age: formData.age,
-      profession: formData.profession,
-      summary: formData.summary
+      storeName: formData.storeName,
+      domainName: formData.domainName,
+      summary: formData.summary,
+      role: 'tenant'
     });
     
     if (result.success) {
-      navigate('/dashboard');
+      // Redirect to appropriate dashboard based on user role
+      const userRole = result.user?.role;
+      if (userRole === 'admin') {
+        navigate('/admin');
+      } else if (userRole === 'tenant') {
+        navigate('/tenant');
+      } else {
+        navigate('/dashboard');
+      }
     } else {
       setError(result.message);
     }
@@ -60,7 +69,7 @@ const SignUpPage = () => {
   };
 
   const handleGoogleLogin = () => {
-    window.location.href = 'http://localhost:3002/auth/google';
+    window.location.href = 'http://localhost:3003/auth/google';
   };
 
   return (
@@ -69,7 +78,7 @@ const SignUpPage = () => {
         <div className="auth-container">
           <div className="auth-card">
             <h2>Sign Up</h2>
-            <p className="auth-subtitle">Create your account to get started.</p>
+            <p className="auth-subtitle">Create your tenant account to get started.</p>
             
             {error && <div className="error-message">{error}</div>}
             
@@ -136,28 +145,30 @@ const SignUpPage = () => {
               
               <div className="form-row">
                 <div className="form-group">
-                  <label htmlFor="age">Age (Optional)</label>
+                  <label htmlFor="storeName">Store Name</label>
                   <input
-                    type="number"
-                    id="age"
-                    name="age"
-                    value={formData.age}
+                    type="text"
+                    id="storeName"
+                    name="storeName"
+                    value={formData.storeName}
                     onChange={handleChange}
+                    required
                     className="form-input"
-                    placeholder="Enter your age"
+                    placeholder="Enter your store name"
                   />
                 </div>
                 
                 <div className="form-group">
-                  <label htmlFor="profession">Profession (Optional)</label>
+                  <label htmlFor="domainName">Domain Name</label>
                   <input
                     type="text"
-                    id="profession"
-                    name="profession"
-                    value={formData.profession}
+                    id="domainName"
+                    name="domainName"
+                    value={formData.domainName}
                     onChange={handleChange}
+                    required
                     className="form-input"
-                    placeholder="Enter your profession"
+                    placeholder="Enter your domain name"
                   />
                 </div>
               </div>

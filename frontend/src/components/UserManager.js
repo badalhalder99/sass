@@ -1,19 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import api, { tenantAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
-const UserManager = () => {
+const UserManager = ({ tenantOnly = false }) => {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [tenants, setTenants] = useState([]);
   const [selectedTenant, setSelectedTenant] = useState('');
-  const [viewMode, setViewMode] = useState('single'); // 'single', 'all'
+  const [viewMode, setViewMode] = useState(tenantOnly ? 'single' : 'single'); // 'single', 'all'
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [newUser, setNewUser] = useState({
     id: '',
     name: '',
     email: '',
-    age: '',
-    profession: '',
     summary: '',
     tenant_id: ''
   });
@@ -28,19 +28,27 @@ const UserManager = () => {
       const response = await tenantAPI.getTenants();
       console.log('Tenants fetch response:', response); // Debug log
 
-      if (response.success) {
+      if (response && response.success) {
         console.log('Setting tenants:', response.data.length, 'tenants'); // Debug log
         setTenants(response.data);
-        // Set default tenant if not selected
+        // Set default tenant based on mode
         if (!selectedTenant && response.data.length > 0) {
-          setSelectedTenant(response.data[0].id.toString());
-          console.log('Set default tenant to:', response.data[0].id); // Debug log
+          if (tenantOnly && currentUser?.tenant_id) {
+            // For tenant-only mode, use current user's tenant
+            setSelectedTenant(currentUser.tenant_id.toString());
+            console.log('Set tenant to current user tenant:', currentUser.tenant_id);
+          } else {
+            setSelectedTenant(response.data[0].id.toString());
+            console.log('Set default tenant to:', response.data[0].id);
+          }
         }
       } else {
         console.error('Failed to fetch tenants:', response);
+        setError('Failed to load tenants. Please refresh the page.');
       }
     } catch (err) {
       console.error('Error fetching tenants:', err);
+      setError('Error connecting to server. Please check your connection.');
     }
   };
 
@@ -50,7 +58,12 @@ const UserManager = () => {
     try {
       const options = {};
 
-      if (viewMode === 'all') {
+      if (tenantOnly && currentUser?.tenant_id) {
+        // For tenant-only mode, always filter by current user's tenant
+        options.tenant_id = currentUser.tenant_id;
+        console.log('Fetching users for tenant-only mode. Current user:', currentUser);
+        console.log('Using tenant_id:', currentUser.tenant_id);
+      } else if (viewMode === 'all') {
         options.all_tenants = true;
       } else if (selectedTenant) {
         options.tenant_id = selectedTenant;
@@ -58,10 +71,12 @@ const UserManager = () => {
 
       const response = await tenantAPI.getUsers(options);
 
-      if (response.success) {
+      if (response && response.success) {
         setUsers(response.data);
+        console.log('Loaded users:', response.data.length); // Debug log
       } else {
         setError('Failed to fetch users');
+        console.error('Users fetch failed:', response);
       }
     } catch (err) {
       setError('Error connecting to server: ' + (err.response?.data?.message || err.message));
@@ -83,14 +98,16 @@ const UserManager = () => {
       // Use selected tenant or the form's tenant selection
       const userData = {
         ...newUser,
-        tenant_id: newUser.tenant_id || selectedTenant
+        tenant_id: tenantOnly && currentUser?.tenant_id 
+          ? currentUser.tenant_id 
+          : (newUser.tenant_id || selectedTenant)
       };
       console.log(userData)
       const response = await tenantAPI.createUser(userData);
       console.log(response)
       if (response.success) {
         // Reset form first
-        setNewUser({ id: '', name: '', email: '', age: '', profession: '', summary: '', tenant_id: '' });
+        setNewUser({ id: '', name: '', email: '', summary: '', tenant_id: '' });
 
         // If user was created for a different tenant than currently viewing, switch to show all or that specific tenant
         const createdUserTenantId = userData.tenant_id || selectedTenant;
@@ -180,7 +197,12 @@ const UserManager = () => {
     setLoading(true);
     setError('');
     try {
-      const response = await api.put(`/api/users/${editingUser._id}`, editingUser);
+      const tenantId = tenantOnly && currentUser?.tenant_id ? currentUser.tenant_id : selectedTenant;
+      const updateData = {
+        ...editingUser,
+        tenant_id: tenantId
+      };
+      const response = await api.put(`/api/users/${editingUser._id}`, updateData);
 
       if (response.data.success) {
         setUsers(users.map(user => user._id === editingUser._id ? response.data.data : user));
@@ -204,108 +226,137 @@ const UserManager = () => {
     setLoading(true);
     setError('');
     try {
-      const response = await api.delete(`/api/users/${userId}`);
+      const tenantId = tenantOnly && currentUser?.tenant_id ? currentUser.tenant_id : selectedTenant;
+      console.log('Deleting user:', userId, 'for tenant:', tenantId);
+      console.log('Delete URL:', `/api/users/${userId}?tenant_id=${tenantId}`);
+      
+      const response = await api.delete(`/api/users/${userId}?tenant_id=${tenantId}`);
+      console.log('Delete response:', response);
 
       if (response.data.success) {
         setUsers(users.filter(user => user._id !== userId));
+        setError('✅ User deleted successfully!');
+        setTimeout(() => setError(''), 3000);
       } else {
         setError('Failed to delete user');
       }
     } catch (err) {
+      console.error('Delete error:', err);
       setError('Error deleting user: ' + (err.response?.data?.message || err.message));
     } finally {
       setLoading(false);
     }
   };
 
+  // Initialize tenant selection for tenant-only mode
   useEffect(() => {
-    fetchTenants();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    if (tenantOnly && currentUser?.tenant_id && !selectedTenant) {
+      setSelectedTenant(currentUser.tenant_id.toString());
+    }
+  }, [tenantOnly, currentUser, selectedTenant]);
 
   useEffect(() => {
-    if (tenants.length > 0) {
+    if (!tenantOnly) {
+      fetchTenants();
+    } else {
+      // For tenant-only mode, create a minimal tenant list with current user's tenant
+      if (currentUser?.tenant_id) {
+        setTenants([{
+          id: currentUser.tenant_id,
+          name: currentUser.storeName || 'My Store',
+          subdomain: currentUser.domainName || 'store'
+        }]);
+        setSelectedTenant(currentUser.tenant_id.toString());
+      }
+    }
+  }, [tenantOnly, currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if ((tenantOnly && currentUser?.tenant_id) || (!tenantOnly && tenants.length > 0)) {
       fetchUsers();
     }
-  }, [selectedTenant, viewMode, tenants]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedTenant, viewMode, tenants, tenantOnly, currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="user-manager">
-      {/* Tenant Management Section */}
-      <section className="tenant-section">
-        <div className="section-header">
-          <h3>🏢 Multi-Tenant Management</h3>
-          <button
-            onClick={() => setShowTenantForm(!showTenantForm)}
-            className="btn btn-secondary"
-          >
-            {showTenantForm ? 'Cancel' : 'Add Tenant'}
-          </button>
-        </div>
-
-        {/* Tenant Creation Form */}
-        {showTenantForm && (
-          <form onSubmit={addTenant} className="tenant-form">
-            <div className="form-grid">
-              <div className="form-group">
-                <input
-                  type="text"
-                  placeholder="Tenant Name *"
-                  value={newTenant.name}
-                  onChange={(e) => setNewTenant({ ...newTenant, name: e.target.value })}
-                  className="form-input"
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <input
-                  type="text"
-                  placeholder="Subdomain *"
-                  value={newTenant.subdomain}
-                  onChange={(e) => setNewTenant({ ...newTenant, subdomain: e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '') })}
-                  className="form-input"
-                  required
-                />
-              </div>
-            </div>
-            <button type="submit" disabled={loading} className="btn btn-primary">
-              {loading ? 'Creating...' : 'Create Tenant'}
-            </button>
-          </form>
-        )}
-
-        {/* Tenant & View Selection */}
-        <div className="tenant-controls">
-          <div className="control-group">
-            <label>View Mode:</label>
-            <select
-              value={viewMode}
-              onChange={(e) => setViewMode(e.target.value)}
-              className="form-input"
+      {/* Tenant Management Section - Only show for admin */}
+      {!tenantOnly && (
+        <section className="tenant-section">
+          <div className="section-header">
+            <h3>🏢 Multi-Tenant Management</h3>
+            <button
+              onClick={() => setShowTenantForm(!showTenantForm)}
+              className="btn btn-secondary"
             >
-              <option value="single">Single Tenant</option>
-              <option value="all">All Tenants</option>
-            </select>
+              {showTenantForm ? 'Cancel' : 'Add Tenant'}
+            </button>
           </div>
 
-          {viewMode === 'single' && (
+          {/* Tenant Creation Form */}
+          {showTenantForm && (
+            <form onSubmit={addTenant} className="tenant-form">
+              <div className="form-grid">
+                <div className="form-group">
+                  <input
+                    type="text"
+                    placeholder="Tenant Name *"
+                    value={newTenant.name}
+                    onChange={(e) => setNewTenant({ ...newTenant, name: e.target.value })}
+                    className="form-input"
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <input
+                    type="text"
+                    placeholder="Subdomain *"
+                    value={newTenant.subdomain}
+                    onChange={(e) => setNewTenant({ ...newTenant, subdomain: e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '') })}
+                    className="form-input"
+                    required
+                  />
+                </div>
+              </div>
+              <button type="submit" disabled={loading} className="btn btn-primary">
+                {loading ? 'Creating...' : 'Create Tenant'}
+              </button>
+            </form>
+          )}
+
+          {/* Tenant & View Selection */}
+          <div className="tenant-controls">
             <div className="control-group">
-              <label>Select Tenant:</label>
+              <label>View Mode:</label>
               <select
-                value={selectedTenant}
-                onChange={(e) => setSelectedTenant(e.target.value)}
+                value={viewMode}
+                onChange={(e) => setViewMode(e.target.value)}
                 className="form-input"
               >
-                <option value="">Choose tenant...</option>
-                {tenants.map(tenant => (
-                  <option key={tenant.id} value={tenant.id}>
-                    {tenant.name} ({tenant.subdomain})
-                  </option>
-                ))}
+                <option value="single">Single Tenant</option>
+                <option value="all">All Tenants</option>
               </select>
             </div>
-          )}
-        </div>
-      </section>
+
+            {viewMode === 'single' && (
+              <div className="control-group">
+                <label>Select Tenant:</label>
+                <select
+                  value={selectedTenant}
+                  onChange={(e) => setSelectedTenant(e.target.value)}
+                  className="form-input"
+                >
+                  <option value="">Choose tenant...</option>
+                  {tenants.map(tenant => (
+                    <option key={tenant.id} value={tenant.id}>
+                      {tenant.name} ({tenant.subdomain})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* Add/Edit User Form */}
       <section className="add-user-section">
@@ -352,7 +403,7 @@ const UserManager = () => {
                   rows="2"
                 />
               </div>
-              {!isEditing && (
+              {!isEditing && !tenantOnly && (
                 <div className="form-group">
                   <select
                     value={newUser.tenant_id}
@@ -368,33 +419,20 @@ const UserManager = () => {
                   </select>
                 </div>
               )}
+              {tenantOnly && currentUser?.storeName && (
+                <div className="form-group">
+                  <input
+                    type="text"
+                    value={`Adding to: ${currentUser.storeName}`}
+                    className="form-input"
+                    disabled
+                    style={{ backgroundColor: '#f5f5f5', color: '#666' }}
+                  />
+                </div>
+              )}
             </div>
 
             <div className='form-column'>
-              <div className="form-group">
-                <input
-                  type="number"
-                  placeholder="Age"
-                  value={isEditing ? editingUser.age || '' : newUser.age}
-                  onChange={(e) => isEditing
-                    ? setEditingUser({ ...editingUser, age: e.target.value })
-                    : setNewUser({ ...newUser, age: e.target.value })
-                  }
-                  className="form-input"
-                />
-              </div>
-              <div className="form-group">
-                <input
-                  type="text"
-                  placeholder="Profession"
-                  value={isEditing ? editingUser.profession || '' : newUser.profession}
-                  onChange={(e) => isEditing
-                    ? setEditingUser({ ...editingUser, profession: e.target.value })
-                    : setNewUser({ ...newUser, profession: e.target.value })
-                  }
-                  className="form-input"
-                />
-              </div>
               <div className="form-group">
                 <input
                   type="email"
@@ -435,11 +473,16 @@ const UserManager = () => {
       <section className="users-section">
         <div className="section-header">
           <h3>
-            👥 Users List
-            {viewMode === 'all' && <span className="view-mode-badge all-tenants">All Tenants</span>}
-            {viewMode === 'single' && selectedTenant && (
+            👥 {tenantOnly ? 'Store Users' : 'Users List'}
+            {!tenantOnly && viewMode === 'all' && <span className="view-mode-badge all-tenants">All Tenants</span>}
+            {!tenantOnly && viewMode === 'single' && selectedTenant && (
               <span className="view-mode-badge single-tenant">
                 {tenants.find(t => t.id.toString() === selectedTenant)?.name || 'Single Tenant'}
+              </span>
+            )}
+            {tenantOnly && currentUser?.storeName && (
+              <span className="view-mode-badge single-tenant">
+                {currentUser.storeName}
               </span>
             )}
             <span className="user-count">({users.length})</span>
@@ -481,22 +524,22 @@ const UserManager = () => {
 
                 <div className="card-content">
                   <div className="user-details">
-                    {user.age && (
-                      <div className="detail-item">
-                        <span className="detail-icon">🎂</span>
-                        <span className="detail-text">{user.age} years old</span>
-                      </div>
-                    )}
-                    {user.profession && (
-                      <div className="detail-item">
-                        <span className="detail-icon">💼</span>
-                        <span className="detail-text">{user.profession}</span>
-                      </div>
-                    )}
                     {user.summary && (
                       <div className="detail-item summary">
                         <span className="detail-icon">📝</span>
                         <span className="detail-text">{user.summary}</span>
+                      </div>
+                    )}
+                    {user.role && (
+                      <div className="detail-item">
+                        <span className="detail-icon">👤</span>
+                        <span className="detail-text">Role: {user.role}</span>
+                      </div>
+                    )}
+                    {user.created_at && (
+                      <div className="detail-item">
+                        <span className="detail-icon">📅</span>
+                        <span className="detail-text">Joined: {new Date(user.created_at).toLocaleDateString()}</span>
                       </div>
                     )}
                   </div>
@@ -527,7 +570,9 @@ const UserManager = () => {
                 <div className="empty-icon">👤</div>
                 <h4>No users found</h4>
                 <p>
-                  {viewMode === 'single'
+                  {tenantOnly
+                    ? 'No users in your store yet. Create your first store user above.'
+                    : viewMode === 'single'
                     ? 'No users in the selected tenant. Try creating a new user or selecting a different tenant.'
                     : 'No users found in any tenant. Start by creating your first user above.'
                   }

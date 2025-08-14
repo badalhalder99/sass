@@ -28,7 +28,15 @@ const SignInPage = () => {
     const result = await login(formData.email, formData.password);
     
     if (result.success) {
-      navigate('/dashboard');
+      // Redirect to appropriate dashboard based on user role
+      const userRole = result.user?.role;
+      if (userRole === 'admin') {
+        navigate('/admin');
+      } else if (userRole === 'tenant') {
+        navigate('/tenant');
+      } else {
+        navigate('/dashboard');
+      }
     } else {
       setError(result.message);
     }
@@ -37,7 +45,7 @@ const SignInPage = () => {
   };
 
   const handleGoogleLogin = () => {
-    window.location.href = 'http://localhost:3002/auth/google';
+    window.location.href = 'http://localhost:3003/auth/google';
   };
 
   return (

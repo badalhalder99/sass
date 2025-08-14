@@ -10,8 +10,8 @@ class User {
     this.name = userData.name;
     this.email = userData.email;
     this.password = userData.password;
-    this.age = userData.age;
-    this.profession = userData.profession;
+    this.storeName = userData.storeName;
+    this.domainName = userData.domainName;
     this.summary = userData.summary;
     this.google_id = userData.google_id || userData.googleId;
     this.avatar = userData.avatar;
@@ -49,11 +49,11 @@ class User {
         type: DataTypes.STRING,
         allowNull: true
       },
-      age: {
-        type: DataTypes.INTEGER,
+      storeName: {
+        type: DataTypes.STRING,
         allowNull: true
       },
-      profession: {
+      domainName: {
         type: DataTypes.STRING,
         allowNull: true
       },
@@ -70,7 +70,7 @@ class User {
         allowNull: true
       },
       role: {
-        type: DataTypes.ENUM('admin', 'user', 'moderator'),
+        type: DataTypes.ENUM('admin', 'user', 'moderator', 'tenant'),
         defaultValue: 'user'
       },
       status: {
@@ -127,8 +127,8 @@ class User {
         name: this.name,
         email: this.email,
         password: this.password,
-        age: this.age,
-        profession: this.profession,
+        storeName: this.storeName,
+        domainName: this.domainName,
         summary: this.summary,
         google_id: this.google_id,
         avatar: this.avatar,
@@ -149,8 +149,8 @@ class User {
         name: this.name,
         email: this.email,
         password: this.password,
-        age: this.age,
-        profession: this.profession,
+        storeName: this.storeName,
+        domainName: this.domainName,
         summary: this.summary,
         google_id: this.google_id,
         avatar: this.avatar,
@@ -188,15 +188,13 @@ class User {
     if (dbType === 'mysql') {
       const sequelize = await getMySQLInstance(tenantId);
       const UserModel = this.initializeMySQL(sequelize);
-      return await UserModel.findOne({ 
-        where: { 
-          email,
-          tenant_id: tenantId 
-        } 
-      });
+      const whereClause = { email };
+      if (tenantId) whereClause.tenant_id = tenantId;
+      return await UserModel.findOne({ where: whereClause });
     }
 
-    const collection = this.getMongoCollection(tenantId);
+    // For authentication, always use main database
+    const collection = this.getMongoCollection(); // Main database without tenant
     const query = { email };
     if (tenantId) query.tenant_id = tenantId.toString();
     return await collection.findOne(query);
@@ -206,15 +204,13 @@ class User {
     if (dbType === 'mysql') {
       const sequelize = await getMySQLInstance(tenantId);
       const UserModel = this.initializeMySQL(sequelize);
-      return await UserModel.findOne({ 
-        where: { 
-          google_id: googleId,
-          tenant_id: tenantId 
-        } 
-      });
+      const whereClause = { google_id: googleId };
+      if (tenantId) whereClause.tenant_id = tenantId;
+      return await UserModel.findOne({ where: whereClause });
     }
 
-    const collection = this.getMongoCollection(tenantId);
+    // For authentication, always use main database
+    const collection = this.getMongoCollection(); // Main database without tenant
     const query = { google_id: googleId };
     if (tenantId) query.tenant_id = tenantId.toString();
     return await collection.findOne(query);

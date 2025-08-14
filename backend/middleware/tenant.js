@@ -18,7 +18,11 @@ const tenantIdentificationMiddleware = async (req, res, next) => {
       tenant = await Tenant.findById(tenantId, 'mysql');
     }
 
-    if (!tenant && !isPublicRoute(req.path)) {
+    // Allow admin routes to bypass tenant checks
+    const isAdminRoute = req.path.includes('/admin') || req.originalUrl.includes('/admin');
+    const isPublic = isPublicRoute(req.path);
+    
+    if (!tenant && !isPublic && !isAdminRoute) {
       return res.status(400).json({
         success: false,
         message: 'Tenant not found or invalid'
@@ -77,7 +81,9 @@ const validateTenantAccess = (requiredStatus = 'active') => {
 
 const tenantIsolation = (dbType = 'both') => {
   return async (req, res, next) => {
-    if (!req.tenantId) {
+    // Skip isolation for admin routes
+    const isAdminRoute = req.path.includes('/admin') || req.originalUrl.includes('/admin');
+    if (!req.tenantId || isAdminRoute) {
       return next();
     }
 
@@ -129,6 +135,9 @@ function isPublicRoute(path) {
     '/auth/register',
     '/auth/google',
     '/auth/google/callback',
+    '/auth/me',  // Allow user profile access for authentication
+    '/auth/logout',  // Allow logout
+    '/auth/admin',  // Allow admin login
     '/api/tenants/create',
     '/api/tenants/list',
     '/api/users',  // Allow user API for frontend compatibility

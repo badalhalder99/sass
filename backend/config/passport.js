@@ -37,34 +37,61 @@ passport.use(new GoogleStrategy({
   },
   async (accessToken, refreshToken, profile, done) => {
     try {
+      // First check if user exists by Google ID
       let user = await User.findByGoogleId(profile.id);
       
       if (user) {
+        // Update last login and return user
+        await User.updateById(user._id, { last_login: new Date() });
         return done(null, user);
       }
 
+      // Check if user exists by email
       user = await User.findByEmail(profile.emails[0].value);
       
       if (user) {
-        const updatedUser = await User.updateById(user._id, { 
-          googleId: profile.id,
-          avatar: profile.photos[0]?.value 
+        // Link Google account to existing user
+        await User.updateById(user._id, { 
+          google_id: profile.id,
+          avatar: profile.photos[0]?.value,
+          last_login: new Date()
         });
-        const updatedUserData = await User.findById(user._id);
-        return done(null, updatedUserData);
+        const updatedUser = await User.findById(user._id);
+        return done(null, updatedUser);
       }
 
+      // Create new user with Google account
       const newUser = new User({
-        googleId: profile.id,
+        tenant_id: 1, // Default tenant for Google auth
+        google_id: profile.id,
         name: profile.displayName,
         email: profile.emails[0].value,
         avatar: profile.photos[0]?.value,
-        createdAt: new Date()
+        role: 'user',
+        status: 'active',
+        email_verified: true, // Google accounts are verified
+        last_login: new Date(),
+        created_at: new Date(),
+        updated_at: new Date()
       });
 
-      const savedUser = await newUser.save();
-      return done(null, savedUser);
+      const savedUser = await newUser.save('mongodb');
+      const userData = {
+        _id: savedUser.mongodb.insertedId,
+        tenant_id: newUser.tenant_id,
+        google_id: newUser.google_id,
+        name: newUser.name,
+        email: newUser.email,
+        avatar: newUser.avatar,
+        role: newUser.role,
+        status: newUser.status,
+        email_verified: newUser.email_verified,
+        created_at: newUser.created_at
+      };
+      
+      return done(null, userData);
     } catch (error) {
+      console.error('Google auth error:', error);
       return done(error);
     }
   }
